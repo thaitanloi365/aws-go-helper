@@ -22,8 +22,10 @@ remove_junk:
 	@rm -rf /var/folders/hv/4hfjh9kx77gd2ympb1_z09wr0000gn/T//output.zip
 
 update_func: remove_junk build_linux_lambda zip
-	AWS_ACCESS_KEY_ID=AKIASTMGVDQSSJ7GUIU6 \
-	AWS_SECRET_ACCESS_KEY=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 \
+	@read -p "AWS_ACCESS_KEY_ID = " access_key; \
+	read -p "AWS_SECRET_ACCESS_KEY = " secret_key; \
+	AWS_ACCESS_KEY_ID=$$access_key \
+	AWS_SECRET_ACCESS_KEY=$$secret_key \
 	drone-lambda --region us-east-1 \
 	--function-name $(DEPLOY_IMAGE) \
 	--source release/linux/lambda/$(DEPLOY_IMAGE)
