@@ -4,15 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/disintegration/imaging"
 )
-
-// MatchOptionalPattern regex
-const MatchOptionalPattern = "^(?P<optional>(?P<dimension>[\\d]{1,4}x[\\d]{1,4})\\_?(?P<crop>top|bottom|center|left|right)*\\_)(?P<file>[a-zA-Z-_0-9]+\\.(?P<ext>jpg|png|gif|jpeg))$"
 
 // Extension
 const (
@@ -33,7 +28,6 @@ const (
 
 // Image model
 type Image struct {
-	Optional  string
 	FileName  string
 	Dimension string
 	Extension Extension
@@ -51,54 +45,6 @@ type Extension string
 // DownloadOutput download output
 type DownloadOutput struct {
 	Data *bytes.Buffer
-}
-
-// IsMatchFormat check format
-func (s *Image) IsMatchFormat() bool {
-	rgx := regexp.MustCompile(MatchOptionalPattern)
-	if !rgx.MatchString(s.Optional) {
-		return false
-	}
-	optionals := make(map[string]string)
-	matches := rgx.FindStringSubmatch(s.Optional)
-	for i, name := range rgx.SubexpNames() {
-		if i != 0 && name != "" {
-			optionals[name] = matches[i]
-		}
-	}
-	defer func() {
-		s.Extension = Extension(optionals["ext"])
-		s.FileName = optionals["file"]
-	}()
-	if optionals["dimension"] == "" {
-		return false
-	}
-
-	s.Dimension = optionals["dimension"]
-	configs := strings.Split(optionals["dimension"], "x")
-	height, err := strconv.ParseInt(configs[0], 10, 64)
-	if err != nil {
-		return false
-	}
-	width, err := strconv.ParseInt(configs[1], 10, 64)
-	if err != nil {
-		return false
-	}
-	s.Height = int(height)
-	s.Width = int(width)
-
-	if s.Height < 0 || s.Width < 0 {
-		return false
-	}
-
-	if s.Height == 0 && s.Width == 0 {
-		return false
-	}
-
-	if optionals["crop"] != "" && s.Height > 0 && s.Width > 0 {
-		s.Crop = CropOption(optionals["crop"])
-	}
-	return true
 }
 
 // GetOutputFileName get output file name
@@ -184,5 +130,8 @@ func (s *Image) ResizeOrCrop(img image.Image) (residedImage *image.NRGBA) {
 
 // GetS3Key get s3 location
 func (s *Image) GetS3Key(folder string, key string) string {
+	if folder == "" {
+		return key
+	}
 	return fmt.Sprintf("%s/%s", folder, key)
 }

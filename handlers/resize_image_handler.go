@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/disintegration/imaging"
 
@@ -22,15 +24,34 @@ import (
 
 // ResizeImageHandler resize image handler
 func ResizeImageHandler(c echo.Context) error {
-	var optional = c.Param("optional")
-	var img = &models.Image{
-		Optional: optional,
-	}
-	var cfg = config.Instance
+	var name = c.Param("name")
+	var crop = c.QueryParam("crop")
+	var size = c.QueryParam("size")
 
-	if !img.IsMatchFormat() {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request format")
+	var img = &models.Image{
+		FileName:  name,
+		Width:     100,
+		Height:    100,
+		Dimension: "100x100",
 	}
+
+	if crop != "" {
+		img.Crop = models.CropOption(crop)
+	}
+
+	var sizeParams = strings.Split(size, "x")
+	if len(sizeParams) > 2 {
+		if w, err := strconv.ParseInt(sizeParams[0], 10, 64); err == nil {
+			img.Width = int(w)
+		}
+
+		if h, err := strconv.ParseInt(sizeParams[1], 10, 64); err == nil {
+			img.Height = int(h)
+		}
+
+	}
+
+	var cfg = config.Instance
 
 	log.Printf("Img: %v | %v | %v | %v | %v | %v\n", img.FileName, img.Crop, img.Extension, img.Dimension, img.Height, img.Width)
 
@@ -40,19 +61,23 @@ func ResizeImageHandler(c echo.Context) error {
 	srv := s3.New(sess)
 	ctx := c.Request().Context()
 
+	sessOfResize := session.Must(session.NewSession())
+	sessOfResize.Config.Region = aws.String(cfg.AWSS3ResizedBucket)
+	srvOfResize := s3.New(sessOfResize)
+
 	// Check if resized already exits, just return
-	targetKey := img.GetS3Key(cfg.AWSS3ResizedFolder, img.GetOutputFileName())
-	_, err := srv.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(cfg.AWSS3Bucket),
+	targetKey := img.GetS3Key("", img.GetOutputFileName())
+	_, err := srvOfResize.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(cfg.AWSS3ResizedBucket),
 		Key:    aws.String(targetKey),
 	})
 	if err == nil {
 		log.Printf("%s already exits", targetKey)
-		var resizedImageLocation = fmt.Sprintf("https://%s.s3.amazonaws.com/%s", cfg.AWSS3Bucket, targetKey)
+		var resizedImageLocation = fmt.Sprintf("https://%s.s3.amazonaws.com/%s", cfg.AWSS3ResizedBucket, targetKey)
 		return c.Redirect(http.StatusTemporaryRedirect, resizedImageLocation)
 	}
 
-	originalKey := img.GetS3Key(cfg.AWSS3OriginFolder, img.FileName)
+	originalKey := img.GetS3Key("", img.FileName)
 
 	// Download image
 	_, err = srv.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
@@ -102,7 +127,7 @@ func ResizeImageHandler(c echo.Context) error {
 	//Upload to S3
 	uploader := s3manager.NewUploader(sess)
 	output, err := uploader.UploadWithContext(ctx, &s3manager.UploadInput{
-		Bucket:      aws.String(cfg.AWSS3Bucket),
+		Bucket:      aws.String(cfg.AWSS3ResizedBucket),
 		Key:         aws.String(targetKey),
 		ContentType: aws.String("image/jpeg"),
 		Body:        bytes.NewReader(bufferEncode.Bytes()),

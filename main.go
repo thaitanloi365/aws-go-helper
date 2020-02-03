@@ -3,7 +3,6 @@ package main
 import (
 	"aws-go-helper/config"
 	"aws-go-helper/handlers"
-	"aws-go-helper/models"
 	"context"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -13,7 +12,6 @@ import (
 )
 
 var echoLambda *echoadapter.EchoLambda
-var s3Config *models.S3Config
 
 func init() {
 	config.SetupEnv()
@@ -21,8 +19,8 @@ func init() {
 
 	e.GET("/config", handlers.GetConfigHandler)
 	e.GET("/stats", handlers.StatsHandler)
-	e.GET("", handlers.GetPublicInfoHandler)
-	e.GET("/resize/:optional", handlers.ResizeImageHandler)
+	e.GET("/", handlers.GetPublicInfoHandler)
+	e.GET("/resize/:name", handlers.ResizeImageHandler)
 	echoLambda = echoadapter.New(e)
 }
 
